@@ -4,12 +4,15 @@ Public website for Sunshine Global Community Services, an Illinois 501(c)(3) pub
 
 **Positioning:** From Surplus to Service.
 
-## Stack (Version 1 foundation)
+## Stack
 
-- Next.js (App Router)
+- Next.js 16 (App Router, static export)
+- React 19
 - TypeScript
-- Tailwind CSS
-- ESLint
+- Tailwind CSS v4
+- Cloudflare Pages + Pages Function (`/api/inquiry`)
+- Cloudflare Turnstile
+- Resend (HTTP API for inquiry notifications)
 
 No CMS, database, authentication, payments, or analytics in this phase.
 
@@ -22,106 +25,105 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+For static export preview:
+
+```bash
+npm run build
+npm run preview:static
+```
+
+For local Pages Function testing (after build):
+
+```bash
+npm run pages:dev
+```
+
+Configure local Function secrets in `.dev.vars` (never commit).
+
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Development server |
-| `npm run build` | Production build |
-| `npm run start` | Run production build |
+| `npm run dev` | Next.js development server |
+| `npm run build` | Static export to `out/` |
+| `npm run preview:static` | Serve static `out/` locally |
+| `npm run pages:dev` | Wrangler Pages dev (`out/` + Functions) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | TypeScript check |
 | `npm test` | Node.js unit tests |
 
 ## Environment
 
-Copy `.env.example` to `.env.local` and adjust placeholders as needed.
+Copy `.env.example` to `.env.local` for local static builds.
 
-`NEXT_PUBLIC_SITE_URL` defaults to `https://example.com` until a production domain is finalized.
+| Variable | Scope | Purpose |
+|----------|-------|---------|
+| `NEXT_PUBLIC_SITE_URL` | Build | Canonical URL, sitemap, Open Graph |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Build | Turnstile widget |
 
-Never put secrets in `NEXT_PUBLIC_*` variables.
+Function secrets (`RESEND_API_KEY`, `TURNSTILE_SECRET_KEY`, `RATE_LIMIT_SECRET`) belong in Cloudflare Pages secrets or `.dev.vars` only — never `NEXT_PUBLIC_*`.
 
-## Render deployment (temporary hosting)
-
-The site runs as a standard Next.js Node server — suitable for a Render **Web Service** while a permanent domain is not yet purchased.
+## Cloudflare Pages deployment
 
 | Setting | Value |
 |---------|--------|
-| **Build Command** | `npm run build` |
-| **Start Command** | `npm run start` |
+| **Build command** | `npm ci && npm run build` |
+| **Output directory** | `out` |
+| **Node.js** | 20 |
 
-After the first deploy, set this environment variable in the Render dashboard:
+Bind in the Cloudflare dashboard (or `wrangler.toml`):
 
-| Variable | Purpose |
-|----------|---------|
-| `NEXT_PUBLIC_SITE_URL` | Public site URL for metadata, sitemap, and canonical links |
+- `INQUIRY_RATE_LIMITER` (preferred) or `INQUIRY_KV` (fallback)
+- Secrets: `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY`, `RATE_LIMIT_SECRET`
+- Vars: `ALLOWED_ORIGIN`, `INQUIRY_EMAIL_TO`, `INQUIRY_EMAIL_FROM`
 
-Use your temporary Render URL (for example `https://your-service.onrender.com`) as `NEXT_PUBLIC_SITE_URL`. Update it again when a permanent domain is connected.
+Do **not** deploy DNS or production secrets until the Project Manager completes the email setup checklist.
 
-Do not put inquiry email credentials, `RATE_LIMIT_SECRET`, or other server secrets in the repository. Configure those only in Render Environment when approved for production.
+## Rate limiting
 
-Render sets `PORT` automatically; `next start` uses it by default.
+Desired policy: **5 submissions / 15 minutes** per hashed client key.
 
-## Donate Goods Inquiry — Production Configuration
+Cloudflare Rate Limit bindings only support periods of **10 or 60 seconds**, so they cannot express a 15-minute window alone.
 
-Email delivery is **not configured** in this repository.
+This project uses a dual-layer design (no database):
 
-Before real public submissions can be accepted in production:
+1. **`INQUIRY_RATE_LIMITER`** — burst protection: 5 / 60 seconds
+2. **`INQUIRY_KV`** — sustained protection: 5 / 15 minutes (TTL; non-atomic)
 
-1. **Confirm a real Sunshine mailbox** for inquiry notifications. Do not invent one.
-2. **Select an email provider separately** (Project Manager decision). Do not wire a vendor until approved.
-3. Store provider credentials as **server-side** environment variables only (`INQUIRY_EMAIL_TO`, `INQUIRY_EMAIL_FROM`, `EMAIL_PROVIDER_API_KEY`).
-4. Implement the provider’s `send()` path in the email abstraction, verify delivery end-to-end, then set `EMAIL_PROVIDER_READY=true`.
-5. Set `RATE_LIMIT_SECRET` (server-only) for salted client-key hashing.
-6. Replace process-local rate limiting with a **durable/shared** rate-limit mechanism appropriate to the hosting environment.
+Both layers run when both bindings are present.
 
-### Why durable rate limiting matters
-
-Current inquiry rate limiting uses an in-memory `RateLimiter` implementation (5 submissions / 15 minutes / salted hashed client key).
-
-**In-memory rate limiting is process-local and does not reliably protect multi-instance/serverless deployments.** Each instance has its own memory, so limits can be bypassed across replicas. Production needs a shared limiter (edge middleware, platform tooling, or similar) behind the same `RateLimiter` interface — without requiring a database for this form.
-
-### Runtime behavior
-
-| Environment | Provider configured? | Result |
-|-------------|----------------------|--------|
-| Development / test | No | Inquiry validated; UI states it was **not emailed** (`development_accepted`) |
-| Production | No | Generic failure — **no success**, no fake delivery |
-| Production | Yes, provider reports success | Success (`delivered`) |
-| Production | Yes, provider fails | Generic failure |
-
-Donor confirmation emails are **not** sent today. That remains a future capability on the same provider abstraction after mailbox/provider decisions are finalized.
-
-Photo uploads are **not** supported. Donors may optionally describe goods in text.
-
-No database is required for the current inquiry path.
-
-### Inquiry flow
+## Donate Goods inquiry architecture
 
 ```text
-Form
-  → Server Action
-  → Honeypot + RateLimiter.check(...)
-  → Shared validation
-  → Inquiry service
-  → Email delivery abstraction
+Static form (Next.js)
+  → POST /api/inquiry (Cloudflare Pages Function)
+  → Turnstile verify + honeypot + validation + rate limit + IP hash
+  → Resend HTTP API
+  → info@sunshineservices.org
+  → Cloudflare Email Routing (INBOUND ONLY)
+  → sunshineservices@gmail.com
 ```
+
+Staff replies use **Gmail Send mail as** `info@sunshineservices.org` via **Resend SMTP** (configured in Gmail — not in this repository).
+
+Notification headers:
+
+- **From:** `noreply@sunshineservices.org`
+- **To:** `info@sunshineservices.org`
+- **Reply-To:** customer email (never in From)
 
 ## Project structure
 
 ```text
-src/
-  app/           # Routes, layout, SEO, server actions
-  components/    # Shared UI and page sections
-  content/       # Structured page content
-  lib/           # Site config, inquiries, email abstraction
-  styles/        # Global design tokens
-  types/         # Shared TypeScript types
-public/          # Static assets
+src/              # Next.js static site
+shared/inquiry/   # Shared validation + inquiry pipeline logic
+functions/        # Cloudflare Pages Functions
+public/           # Static assets + _headers
+out/              # Static export output (gitignored)
 ```
 
 ## Notes
 
 - Do not invent statistics, partnerships, testimonials, or contact details.
 - Do not publish EIN or unconfirmed operational information.
-- Agent brief Markdown files in the repository root are planning references only.
+- Do not commit secrets or activate paid services automatically.

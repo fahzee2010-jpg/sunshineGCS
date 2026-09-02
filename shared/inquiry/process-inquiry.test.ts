@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import {
-  getEmailDeliveryReadiness,
-  setEmailProviderForTests,
-} from "../email";
 import { hashClientIdentifier } from "./client-key";
 import {
   formatInquiryEmailSubject,
@@ -16,12 +12,6 @@ import {
   setInquiryLogSink,
 } from "./logging";
 import { processDonateGoodsInquiry } from "./process-inquiry";
-import {
-  resetRateLimitState,
-  setRateLimiterForTests,
-  getRateLimiter,
-} from "./rate-limit";
-import type { RateLimiter } from "./rate-limiter";
 import { emptyInquiryInput } from "./validation";
 import type { DonateGoodsInquiryInput } from "./types";
 
@@ -44,23 +34,39 @@ function validInput(
   };
 }
 
+function createMemoryRateLimiter(limit = 5) {
+  const buckets = new Map<string, number>();
+
+  return {
+    async check(key: string): Promise<boolean> {
+      const count = buckets.get(key) ?? 0;
+      if (count >= limit) {
+        return false;
+      }
+      buckets.set(key, count + 1);
+      return true;
+    },
+    reset() {
+      buckets.clear();
+    },
+  };
+}
+
 afterEach(() => {
-  resetRateLimitState();
-  setRateLimiterForTests(null);
-  setEmailProviderForTests(null);
   setInquiryLogSink(null);
-  delete process.env.INQUIRY_EMAIL_TO;
-  delete process.env.INQUIRY_EMAIL_FROM;
-  delete process.env.EMAIL_PROVIDER_API_KEY;
-  delete process.env.EMAIL_PROVIDER_READY;
   delete process.env.RATE_LIMIT_SECRET;
 });
 
 describe("processDonateGoodsInquiry production guards", () => {
-  it("does not return success in production without a provider", async () => {
+  it("does not return success in production without Resend configured", async () => {
+    const limiter = createMemoryRateLimiter();
     const result = await processDonateGoodsInquiry(validInput(), {
-      nodeEnv: "production",
+      environment: "production",
       rateLimitKey: "prod-missing",
+      checkRateLimit: limiter.check,
+      isDeliveryConfigured: () => false,
+      getMailbox: () => ({}),
+      sendEmail: async () => true,
     });
     assert.equal(result.status, "error");
     if (result.status === "error") {
@@ -68,10 +74,15 @@ describe("processDonateGoodsInquiry production guards", () => {
     }
   });
 
-  it("uses development_accepted (not delivered) without a provider outside production", async () => {
+  it("uses development_accepted (not delivered) without Resend outside production", async () => {
+    const limiter = createMemoryRateLimiter();
     const result = await processDonateGoodsInquiry(validInput(), {
-      nodeEnv: "development",
+      environment: "development",
       rateLimitKey: "dev-ok",
+      checkRateLimit: limiter.check,
+      isDeliveryConfigured: () => false,
+      getMailbox: () => ({}),
+      sendEmail: async () => true,
     });
     assert.equal(result.status, "success");
     if (result.status === "success") {
@@ -80,19 +91,18 @@ describe("processDonateGoodsInquiry production guards", () => {
     }
   });
 
-  it("returns success only when the provider reports success", async () => {
-    process.env.INQUIRY_EMAIL_TO = "inquiries@example.com";
-    process.env.INQUIRY_EMAIL_FROM = "noreply@example.com";
-
-    setEmailProviderForTests({
-      name: "test",
-      isConfigured: () => true,
-      send: async () => ({ ok: true, provider: "test" }),
-    });
-
+  it("returns success only when Resend reports success", async () => {
+    const limiter = createMemoryRateLimiter();
     const result = await processDonateGoodsInquiry(validInput(), {
-      nodeEnv: "production",
+      environment: "production",
       rateLimitKey: "provider-ok",
+      checkRateLimit: limiter.check,
+      isDeliveryConfigured: () => true,
+      getMailbox: () => ({
+        to: "info@example.com",
+        from: "noreply@example.com",
+      }),
+      sendEmail: async () => true,
     });
     assert.equal(result.status, "success");
     if (result.status === "success") {
@@ -100,19 +110,18 @@ describe("processDonateGoodsInquiry production guards", () => {
     }
   });
 
-  it("returns generic failure when the provider fails", async () => {
-    process.env.INQUIRY_EMAIL_TO = "inquiries@example.com";
-    process.env.INQUIRY_EMAIL_FROM = "noreply@example.com";
-
-    setEmailProviderForTests({
-      name: "test",
-      isConfigured: () => true,
-      send: async () => ({ ok: false, reason: "send_failed" }),
-    });
-
+  it("returns generic failure when Resend fails", async () => {
+    const limiter = createMemoryRateLimiter();
     const result = await processDonateGoodsInquiry(validInput(), {
-      nodeEnv: "production",
+      environment: "production",
       rateLimitKey: "provider-fail",
+      checkRateLimit: limiter.check,
+      isDeliveryConfigured: () => true,
+      getMailbox: () => ({
+        to: "info@example.com",
+        from: "noreply@example.com",
+      }),
+      sendEmail: async () => false,
     });
     assert.equal(result.status, "error");
     if (result.status === "error") {
@@ -121,46 +130,49 @@ describe("processDonateGoodsInquiry production guards", () => {
   });
 
   it("blocks honeypot submissions", async () => {
+    const limiter = createMemoryRateLimiter();
     const result = await processDonateGoodsInquiry(
       validInput({ companyWebsite: "http://spam.example" }),
-      { nodeEnv: "test", rateLimitKey: "honeypot" },
+      {
+        environment: "test",
+        rateLimitKey: "honeypot",
+        checkRateLimit: limiter.check,
+        isDeliveryConfigured: () => true,
+        getMailbox: () => ({
+          to: "info@example.com",
+          from: "noreply@example.com",
+        }),
+        sendEmail: async () => true,
+      },
     );
     assert.equal(result.status, "spam");
   });
 });
 
-describe("RateLimiter abstraction", () => {
-  it("uses the injected RateLimiter implementation", async () => {
-    let checked = false;
-    const fake: RateLimiter = {
-      check() {
-        checked = true;
-        return { allowed: false, remaining: 0, retryAfterMs: 1000 };
-      },
-    };
-    setRateLimiterForTests(fake);
-    assert.equal(getRateLimiter(), fake);
-
-    const result = await processDonateGoodsInquiry(validInput(), {
-      nodeEnv: "test",
-      rateLimitKey: "via-abstraction",
-    });
-    assert.equal(checked, true);
-    assert.equal(result.status, "rate_limited");
-  });
-
-  it("rate limits repeated submissions through the default limiter", async () => {
+describe("Rate limiting", () => {
+  it("rate limits repeated submissions", async () => {
+    const limiter = createMemoryRateLimiter();
     const key = "rate-limit-key";
+
     for (let i = 0; i < 5; i += 1) {
       const result = await processDonateGoodsInquiry(validInput(), {
-        nodeEnv: "test",
+        environment: "test",
         rateLimitKey: key,
+        checkRateLimit: limiter.check,
+        isDeliveryConfigured: () => false,
+        getMailbox: () => ({}),
+        sendEmail: async () => true,
       });
       assert.equal(result.status, "success");
     }
+
     const blocked = await processDonateGoodsInquiry(validInput(), {
-      nodeEnv: "test",
+      environment: "test",
       rateLimitKey: key,
+      checkRateLimit: limiter.check,
+      isDeliveryConfigured: () => false,
+      getMailbox: () => ({}),
+      sendEmail: async () => true,
     });
     assert.equal(blocked.status, "rate_limited");
   });
@@ -170,10 +182,15 @@ describe("logging", () => {
   it("does not log inquiry PII payloads", async () => {
     const lines: string[] = [];
     setInquiryLogSink((line) => lines.push(line));
+    const limiter = createMemoryRateLimiter();
 
     await processDonateGoodsInquiry(validInput(), {
-      nodeEnv: "development",
+      environment: "development",
       rateLimitKey: "log-check",
+      checkRateLimit: limiter.check,
+      isDeliveryConfigured: () => false,
+      getMailbox: () => ({}),
+      sendEmail: async () => true,
     });
 
     assert.ok(lines.length > 0);
@@ -231,45 +248,41 @@ describe("email payload", () => {
 
 describe("client key hashing", () => {
   it("does not return the raw IP", () => {
-    process.env.RATE_LIMIT_SECRET = "test-secret";
-    const hashed = hashClientIdentifier("203.0.113.10");
+    const hashed = hashClientIdentifier("203.0.113.10", "test-secret");
     assert.notEqual(hashed, "203.0.113.10");
     assert.equal(hashed.length, 32);
   });
 
   it("changes when the secret changes", () => {
-    process.env.RATE_LIMIT_SECRET = "secret-a";
-    const a = hashClientIdentifier("203.0.113.10");
-    process.env.RATE_LIMIT_SECRET = "secret-b";
-    const b = hashClientIdentifier("203.0.113.10");
+    const a = hashClientIdentifier("203.0.113.10", "secret-a");
+    const b = hashClientIdentifier("203.0.113.10", "secret-b");
     assert.notEqual(a, b);
   });
 });
 
-describe("environment readiness", () => {
-  it("reports missing production configuration safely", () => {
-    const readiness = getEmailDeliveryReadiness();
-    assert.equal(readiness.ready, false);
-    assert.ok(readiness.missing.includes("INQUIRY_EMAIL_TO"));
-    assert.ok(readiness.missing.includes("EMAIL_PROVIDER_READY"));
-  });
-});
+describe("Resend delivery contract", () => {
+  it("uses Reply-To for the customer email and never From", async () => {
+    let capturedReplyTo = "";
+    const limiter = createMemoryRateLimiter();
 
-describe("unwired env provider", () => {
-  it("does not succeed even if READY placeholders are set without a real send implementation", async () => {
-    process.env.INQUIRY_EMAIL_TO = "inquiries@example.com";
-    process.env.INQUIRY_EMAIL_FROM = "noreply@example.com";
-    process.env.EMAIL_PROVIDER_API_KEY = "placeholder-key";
-    process.env.EMAIL_PROVIDER_READY = "true";
-    setEmailProviderForTests(null);
-
-    const result = await processDonateGoodsInquiry(validInput(), {
-      nodeEnv: "production",
-      rateLimitKey: "ready-but-unwired",
+    await processDonateGoodsInquiry(validInput({ email: "customer@example.com" }), {
+      environment: "production",
+      rateLimitKey: "reply-to",
+      checkRateLimit: limiter.check,
+      isDeliveryConfigured: () => true,
+      getMailbox: () => ({
+        to: "info@sunshineservices.org",
+        from: "noreply@sunshineservices.org",
+      }),
+      sendEmail: async (delivery) => {
+        capturedReplyTo = delivery.replyTo;
+        assert.equal(delivery.from, "noreply@sunshineservices.org");
+        assert.equal(delivery.to, "info@sunshineservices.org");
+        assert.notEqual(delivery.from, delivery.replyTo);
+        return true;
+      },
     });
-    assert.equal(result.status, "error");
-    if (result.status === "error") {
-      assert.equal(result.code, "delivery_failed");
-    }
+
+    assert.equal(capturedReplyTo, "customer@example.com");
   });
 });

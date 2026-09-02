@@ -2,6 +2,8 @@ import type { MetadataRoute } from "next";
 import { pages } from "@/content/pages";
 import { SITE_URL } from "@/lib/site-config";
 
+export const dynamic = "force-static";
+
 export default function sitemap(): MetadataRoute.Sitemap {
   // Internal preview routes (e.g. /design-system) are intentionally omitted.
   return Object.values(pages).map((page) => ({

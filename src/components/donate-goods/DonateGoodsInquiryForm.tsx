@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition, type FormEvent } from "react";
-import { submitDonateGoodsInquiry } from "@/app/actions/donate-goods-inquiry";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from "react";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
@@ -19,6 +25,7 @@ import {
   HONEYPOT_FIELD,
   PRODUCT_TYPE_LABELS,
   PRODUCT_TYPES,
+  TURNSTILE_FIELD,
 } from "@/lib/inquiries/constants";
 import type { ClientInquiryResult } from "@/lib/inquiries/client-result";
 import type {
@@ -30,6 +37,9 @@ import {
   validateDonateGoodsInquiry,
 } from "@/lib/inquiries/validation";
 import { cn } from "@/lib/cn";
+
+const INQUIRY_API_PATH = "/api/inquiry";
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 
 function describedBy(
   id: string,
@@ -50,12 +60,74 @@ export function DonateGoodsInquiryForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<ClientInquiryResult | null>(null);
   const [isPending, startTransition] = useTransition();
+  const turnstileContainerRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (Object.keys(errors).length > 0) {
       errorSummaryRef.current?.focus();
     }
   }, [errors]);
+
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !turnstileContainerRef.current) {
+      return;
+    }
+
+    const renderWidget = () => {
+      if (!window.turnstile || !turnstileContainerRef.current) {
+        return;
+      }
+
+      if (turnstileWidgetIdRef.current) {
+        window.turnstile.remove(turnstileWidgetIdRef.current);
+      }
+
+      turnstileWidgetIdRef.current = window.turnstile.render(
+        turnstileContainerRef.current,
+        {
+          sitekey: TURNSTILE_SITE_KEY,
+          theme: "light",
+        },
+      );
+    };
+
+    if (window.turnstile) {
+      renderWidget();
+      return () => {
+        if (turnstileWidgetIdRef.current && window.turnstile) {
+          window.turnstile.remove(turnstileWidgetIdRef.current);
+        }
+      };
+    }
+
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src*="challenges.cloudflare.com/turnstile"]',
+    );
+
+    if (existingScript) {
+      existingScript.addEventListener("load", renderWidget);
+      return () => {
+        existingScript.removeEventListener("load", renderWidget);
+        if (turnstileWidgetIdRef.current && window.turnstile) {
+          window.turnstile.remove(turnstileWidgetIdRef.current);
+        }
+      };
+    }
+
+    const script = document.createElement("script");
+    script.src =
+      "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.onload = renderWidget;
+    document.head.appendChild(script);
+
+    return () => {
+      if (turnstileWidgetIdRef.current && window.turnstile) {
+        window.turnstile.remove(turnstileWidgetIdRef.current);
+      }
+    };
+  }, []);
 
   function updateField<K extends keyof DonateGoodsInquiryInput>(
     key: K,
@@ -81,10 +153,51 @@ export function DonateGoodsInquiryForm() {
       return;
     }
 
+    if (!TURNSTILE_SITE_KEY) {
+      setFormError(
+        "We couldn't submit your inquiry right now. Please try again later.",
+      );
+      setResult(null);
+      return;
+    }
+
+    const turnstileToken = window.turnstile?.getResponse(
+      turnstileWidgetIdRef.current ?? undefined,
+    );
+
+    if (!turnstileToken) {
+      setFormError(
+        "We couldn't submit your inquiry right now. Please try again later.",
+      );
+      setResult(null);
+      return;
+    }
+
     const formData = new FormData(event.currentTarget);
+    const payload = Object.fromEntries(formData.entries());
+    payload[TURNSTILE_FIELD] = turnstileToken;
 
     startTransition(async () => {
-      const response = await submitDonateGoodsInquiry(formData);
+      let response: ClientInquiryResult;
+
+      try {
+        const apiResponse = await fetch(INQUIRY_API_PATH, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        response = (await apiResponse.json()) as ClientInquiryResult;
+      } catch {
+        setFormError(
+          "We couldn't submit your inquiry right now. Please try again later.",
+        );
+        setResult(null);
+        return;
+      }
 
       if (response.status === "validation_error") {
         setErrors(response.errors);
@@ -102,6 +215,7 @@ export function DonateGoodsInquiryForm() {
 
       setErrors({});
       setResult(response);
+      window.turnstile?.reset(turnstileWidgetIdRef.current ?? undefined);
     });
   }
 
@@ -604,8 +718,20 @@ export function DonateGoodsInquiryForm() {
         </p>
       </div>
 
+      {TURNSTILE_SITE_KEY ? (
+        <div
+          ref={turnstileContainerRef}
+          className="min-h-[65px]"
+          aria-label="Security verification"
+        />
+      ) : null}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Button type="submit" variant="primary" disabled={isPending}>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={isPending || !TURNSTILE_SITE_KEY}
+        >
           {isPending ? "Submitting inquiry…" : "Submit Donation Inquiry"}
         </Button>
         <p className="text-body-sm" aria-live="polite">

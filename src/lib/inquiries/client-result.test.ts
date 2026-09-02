@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { toClientInquiryResult } from "./client-result";
+import { toClientInquiryResult } from "../../../shared/inquiry/client-result";
 
 describe("toClientInquiryResult", () => {
   it("maps honeypot spam to opaque success without revealing spam status", () => {

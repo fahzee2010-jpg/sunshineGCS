@@ -1,0 +1,20 @@
+# Local Wrangler Pages Function environment (copy to `.dev.vars`).
+# `.dev.vars` is gitignored — do not commit real production secrets.
+#
+# Cloudflare official Turnstile test keys:
+# https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+#
+# Always passes (local happy-path):
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+# Always fails (use temporarily to verify invalid/blocked Turnstile):
+# TURNSTILE_SECRET_KEY=2x0000000000000000000000000000000AA
+#
+ENVIRONMENT=development
+ALLOWED_ORIGIN=http://127.0.0.1:8788
+RATE_LIMIT_SECRET=local-dev-only-not-for-production
+INQUIRY_EMAIL_TO=info@sunshineservices.org
+INQUIRY_EMAIL_FROM=noreply@sunshineservices.org
+#
+# Leave RESEND_API_KEY unset for local development_accepted path.
+# To test Resend failure: set ENVIRONMENT=production and RESEND_API_KEY=re_invalid_test
+# RESEND_API_KEY=

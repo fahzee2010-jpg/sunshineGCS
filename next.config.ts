@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 /**
- * Baseline security headers for a public informational site.
- * Forms, payments, and analytics will be added in later tasks.
+ * Static export for Cloudflare Pages.
+ * Security headers are also replicated in public/_headers for static hosting.
  */
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -15,6 +15,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  output: "export",
   poweredByHeader: false,
   async headers() {
     return [

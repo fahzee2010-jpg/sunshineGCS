@@ -1,0 +1,46 @@
+name = "sunshine-global-community-services"
+compatibility_date = "2024-08-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "out"
+
+# ---------------------------------------------------------------------------
+# Rate limiting design (approved architecture)
+# ---------------------------------------------------------------------------
+# Desired protection: ~5 submissions per 15 minutes per hashed client key.
+#
+# Cloudflare Rate Limit bindings ONLY support period = 10 or 60 seconds.
+# They CANNOT directly express a 15-minute window.
+#
+# Dual-layer approach (no database / Redis):
+# 1) INQUIRY_RATE_LIMITER — burst: 5 calls / 60 seconds (binding)
+# 2) INQUIRY_KV — sustained: 5 submissions / 900 seconds (KV TTL; non-atomic)
+#
+# Prefer Rate Limit for burst. Use KV for the 15-minute policy.
+# Create real namespace IDs in the Cloudflare dashboard before production deploy.
+# ---------------------------------------------------------------------------
+
+# Create the KV namespace in Cloudflare before deploy, then replace id/preview_id.
+# Local Wrangler uses these placeholders for an in-memory KV simulation.
+[[kv_namespaces]]
+binding = "INQUIRY_KV"
+id = "00000000000000000000000000000000"
+preview_id = "00000000000000000000000000000000"
+
+# Burst layer — period MUST be 10 or 60 (Wrangler-enforced).
+# Replace namespace_id with the account-unique integer Cloudflare provides.
+[[ratelimits]]
+name = "INQUIRY_RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }
+
+# Production defaults for deploy. Override locally via `.dev.vars` (gitignored).
+[vars]
+ENVIRONMENT = "production"
+ALLOWED_ORIGIN = "https://sunshineservices.org"
+INQUIRY_EMAIL_TO = "info@sunshineservices.org"
+INQUIRY_EMAIL_FROM = "noreply@sunshineservices.org"
+
+# Secrets (set via dashboard or `wrangler secret put`, never commit):
+# RESEND_API_KEY
+# TURNSTILE_SECRET_KEY
+# RATE_LIMIT_SECRET

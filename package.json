@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/lib/inquiries/validation.test.ts src/lib/inquiries/process-inquiry.test.ts src/lib/inquiries/client-result.test.ts"
+    "test": "tsx --test shared/inquiry/process-inquiry.test.ts shared/inquiry/origin.test.ts shared/inquiry/rate-limit.test.ts src/lib/inquiries/validation.test.ts src/lib/inquiries/client-result.test.ts",
+    "preview:static": "npx serve out",
+    "pages:dev": "wrangler pages dev out --ip 127.0.0.1 --port 8788"
   },
   "dependencies": {
     "next": "16.3.3",
@@ -16,6 +18,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260828.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -24,6 +27,7 @@
     "eslint-config-next": "16.3.3",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.14.0"
   }
 }

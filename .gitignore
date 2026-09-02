@@ -35,6 +35,11 @@ yarn-error.log*
 .env
 .env.*
 !.env.example
+!.dev.vars.example
+.dev.vars
+
+# wrangler local state
+.wrangler/
 
 # vercel
 .vercel

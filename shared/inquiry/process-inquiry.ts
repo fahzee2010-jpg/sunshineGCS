@@ -1,22 +1,24 @@
-import {
-  getInquiryMailboxConfig,
-  isEmailDeliveryConfigured,
-  sendInquiryEmail,
-} from "../email";
 import { buildInquiryEmailPayload } from "./format-email";
 import { logInquiryEvent } from "./logging";
-import { checkRateLimit } from "./rate-limit";
-import type {
-  DonateGoodsInquiryInput,
-  ProcessInquiryResult,
-} from "./types";
+import type { DonateGoodsInquiryInput, ProcessInquiryResult } from "./types";
 import { validateDonateGoodsInquiry } from "./validation";
 
-export type ProcessInquiryOptions = {
-  /** Opaque rate-limit key (e.g. salted hashed IP). Never log the raw IP. */
-  rateLimitKey?: string;
-  /** Override NODE_ENV for tests. */
-  nodeEnv?: string;
+export type InquiryEmailDelivery = {
+  to: string;
+  from: string;
+  replyTo: string;
+  subject: string;
+  text: string;
+};
+
+export type ProcessInquiryDependencies = {
+  environment: string;
+  rateLimitKey: string;
+  rateLimitSecret?: string;
+  checkRateLimit: (key: string) => Promise<boolean>;
+  isDeliveryConfigured: () => boolean;
+  getMailbox: () => { to?: string; from?: string };
+  sendEmail: (delivery: InquiryEmailDelivery) => Promise<boolean>;
 };
 
 function isHoneypotTriggered(input: DonateGoodsInquiryInput): boolean {
@@ -25,29 +27,27 @@ function isHoneypotTriggered(input: DonateGoodsInquiryInput): boolean {
 
 /**
  * Server-side inquiry pipeline:
- * honeypot → rate limit → validation → delivery abstraction.
+ * honeypot → rate limit → validation → Resend delivery.
  *
- * Does not contain provider-specific code.
  * Never logs full inquiry payloads or PII.
  */
 export async function processDonateGoodsInquiry(
   input: DonateGoodsInquiryInput,
-  options: ProcessInquiryOptions = {},
+  deps: ProcessInquiryDependencies,
 ): Promise<ProcessInquiryResult> {
-  const env = options.nodeEnv ?? process.env.NODE_ENV ?? "development";
+  const env = deps.environment;
 
   if (isHoneypotTriggered(input)) {
     logInquiryEvent("inquiry_honeypot_blocked", { env });
     return { status: "spam" };
   }
 
-  if (env === "production" && !process.env.RATE_LIMIT_SECRET) {
+  if (env === "production" && !deps.rateLimitSecret) {
     logInquiryEvent("inquiry_rate_limit_secret_missing", { env });
   }
 
-  const rateKey = options.rateLimitKey ?? "anonymous";
-  const rate = checkRateLimit(rateKey, { limit: 5, windowMs: 15 * 60 * 1000 });
-  if (!rate.allowed) {
+  const allowed = await deps.checkRateLimit(deps.rateLimitKey);
+  if (!allowed) {
     logInquiryEvent("inquiry_rate_limited", { env });
     return { status: "rate_limited" };
   }
@@ -61,9 +61,7 @@ export async function processDonateGoodsInquiry(
     return { status: "validation_error", errors: validation.errors };
   }
 
-  const deliveryConfigured = isEmailDeliveryConfigured();
-
-  if (!deliveryConfigured) {
+  if (!deps.isDeliveryConfigured()) {
     if (env === "production") {
       logInquiryEvent("inquiry_delivery_not_configured", {
         env,
@@ -72,7 +70,6 @@ export async function processDonateGoodsInquiry(
       return { status: "error", code: "delivery_not_configured" };
     }
 
-    // Development/test only — never report as delivered email.
     logInquiryEvent("inquiry_development_accepted", {
       env,
       providerConfigured: false,
@@ -80,7 +77,7 @@ export async function processDonateGoodsInquiry(
     return { status: "success", delivery: "development_accepted" };
   }
 
-  const mailbox = getInquiryMailboxConfig();
+  const mailbox = deps.getMailbox();
   if (!mailbox.to || !mailbox.from) {
     logInquiryEvent("inquiry_delivery_not_configured", {
       env,
@@ -90,21 +87,15 @@ export async function processDonateGoodsInquiry(
   }
 
   const payload = buildInquiryEmailPayload(validation.data);
-  const sendResult = await sendInquiryEmail({
+  const sent = await deps.sendEmail({
     to: mailbox.to,
     from: mailbox.from,
+    replyTo: validation.data.email,
     subject: payload.subject,
     text: payload.text,
   });
 
-  if (!sendResult.ok) {
-    if (sendResult.reason === "not_configured") {
-      logInquiryEvent("inquiry_delivery_not_configured", {
-        env,
-        providerConfigured: false,
-      });
-      return { status: "error", code: "delivery_not_configured" };
-    }
+  if (!sent) {
     logInquiryEvent("inquiry_delivery_failed", {
       env,
       providerConfigured: true,
