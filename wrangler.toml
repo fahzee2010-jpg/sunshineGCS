@@ -36,6 +36,7 @@ ENVIRONMENT = "production"
 ALLOWED_ORIGIN = "https://sunshineservices.org"
 INQUIRY_EMAIL_TO = "info@sunshineservices.org"
 INQUIRY_EMAIL_FROM = "noreply@sunshineservices.org"
+NEXT_PUBLIC_TURNSTILE_SITE_KEY = "0x4AAAAAAEoZ1HamZ51xoiDT  "
 
 # Secrets (set via dashboard or `wrangler secret put`, never commit):
 # RESEND_API_KEY
