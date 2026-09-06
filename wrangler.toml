@@ -34,6 +34,7 @@ id = "59d83c15e47943b68a99fac0be8def19"
 [vars]
 ENVIRONMENT = "production"
 ALLOWED_ORIGIN = "https://sunshineservices.org"
+NEXT_PUBLIC_SITE_URL = "https://sunshineservices.org"
 INQUIRY_EMAIL_TO = "info@sunshineservices.org"
 INQUIRY_EMAIL_FROM = "noreply@sunshineservices.org"
 NEXT_PUBLIC_TURNSTILE_SITE_KEY = "0x4AAAAAAEoZ1HamZ51xoiDT"
