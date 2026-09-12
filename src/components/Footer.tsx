@@ -2,6 +2,7 @@ import Link from "next/link";
 import { footerGroups } from "@/content/navigation";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/site-config";
 import { Container } from "@/components/layout/Container";
+import { SocialLinks } from "@/components/SocialLinks";
 
 export function Footer() {
   const year = new Date().getFullYear();
@@ -17,6 +18,9 @@ export function Footer() {
             Illinois 501(c)(3) public charity. Additional transparency materials
             will be published when available.
           </p>
+          <div className="mt-5">
+            <SocialLinks />
+          </div>
         </div>
 
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
