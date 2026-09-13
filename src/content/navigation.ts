@@ -4,6 +4,7 @@ import type { NavItem } from "@/types/content";
 export const primaryActions: NavItem[] = [
   { href: "/donate-goods", label: "Donate Goods" },
   { href: "/get-assistance", label: "Get Assistance" },
+  { href: "/contact", label: "Contact" },
   { href: "/donate", label: "Donate" },
 ];
 
@@ -15,12 +16,11 @@ export const secondaryNav: NavItem[] = [
   { href: "/corporate-partners", label: "Corporate Partners" },
 ];
 
-/** Mobile menu: CTAs first, then secondary, then Volunteer & Contact. */
+/** Mobile menu: CTAs first (including Contact), then Volunteer & secondary. */
 export const mobileNav: NavItem[] = [
   ...primaryActions,
   { href: "/volunteer", label: "Volunteer" },
   ...secondaryNav,
-  { href: "/contact", label: "Contact" },
 ];
 
 export type FooterGroup = {

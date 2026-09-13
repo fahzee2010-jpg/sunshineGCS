@@ -1,7 +1,7 @@
 /**
  * Contact page copy for Sunshine Global Community Services.
- * Informational only — no live contact form and no invented email,
- * phone, address, hours, contact persons, or response times.
+ * Use only confirmed public contact details. Do not invent city, days of
+ * operation, service area, pickup/drop-off availability, or response times.
  */
 
 import { DONATION_INQUIRY_ANCHOR } from "@/content/donate-goods";
@@ -18,27 +18,68 @@ export const contactHero = {
   eyebrow: "Contact",
   headline: "Contact Sunshine Global Community Services",
   support:
-    "Sunshine welcomes questions from community members, businesses, volunteers, and organizations. Use this page to find the right pathway while public contact channels are being finalized.",
+    "We welcome questions about our programs, donations, volunteering, community assistance, and partnership opportunities.",
+};
+
+export type ContactChannelItem = {
+  title: string;
+  body?: string;
+  href?: string;
+  accessibilityLabel?: string;
+  openInNewTab?: boolean;
+  contacts?: Array<{
+    label: string;
+    value: string;
+    href: string;
+    accessibilityLabel: string;
+  }>;
 };
 
 export const contactChannels = {
-  heading: "Contact information status",
+  heading: "Contact Information",
   intro:
-    "Public contact channels are being finalized. Verified details will be published here when confirmed.",
+    "Use the contact details below for general questions. For donations, partnerships, assistance, or volunteering, the pathway cards on this page can help you find the most relevant resource.",
   items: [
     {
       title: "General Contact",
-      body: "Public email and phone information will be published once confirmed.",
+      contacts: [
+        {
+          label: "Email",
+          value: "info@sunshineservices.org",
+          href: "mailto:info@sunshineservices.org",
+          accessibilityLabel:
+            "Email Sunshine Global Community Services at info@sunshineservices.org",
+        },
+        {
+          label: "Phone",
+          value: "+1 630-880-4123",
+          href: "tel:+16308804123",
+          accessibilityLabel:
+            "Call Sunshine Global Community Services at +1 630-880-4123",
+        },
+      ],
     },
     {
-      title: "Mailing / Physical Location",
-      body: "Address information will be published when confirmed.",
+      title: "Physical Location",
+      body: "20 Hampton Rd\nMorris, IL 60450\nUSA",
+      href: "https://www.google.com/maps/search/?api=1&query=20+Hampton+Rd%2C+Morris%2C+IL+60450%2C+USA",
+      accessibilityLabel:
+        "Get directions to Sunshine Global Community Services",
+      openInNewTab: true,
     },
     {
-      title: "Hours",
-      body: "Public operating and contact hours will be published when confirmed.",
+      title: "Contact Hours",
+      body: "9:00 AM–6:00 PM",
     },
-  ],
+    {
+      title: "Service Area",
+      body: "Our service area information will be published once confirmed.",
+    },
+    {
+      title: "Donation Pickup / Drop-off",
+      body: "Information about donation pickup and drop-off availability will be published once confirmed.",
+    },
+  ] satisfies ContactChannelItem[],
 };
 
 export const contactPathways = {
@@ -115,10 +156,10 @@ export const contactCommunity = {
 
 export const contactGeneralPlaceholder = {
   heading: "General Inquiries",
-  status: "Pathway being prepared",
-  body: "The general contact pathway is being prepared. Verified public contact information will be published when available.",
+  status: "Public contact details published",
+  body: "Public email, phone, location, and contact hours are listed above. This section is not a live contact form, and no personal information is collected on this page.",
   support:
-    "Until then, visitors can review About, Programs, or Donate Goods for the most relevant information. This is not a live contact form, and no personal information is collected on this page.",
+    "For donation, partnership, assistance, or volunteer questions, use the pathway cards on this page or review About, Programs, or Donate Goods.",
 };
 
 export const contactPrivacy = {
@@ -143,7 +184,7 @@ export const contactFaq = {
     {
       question: "How can I contact Sunshine?",
       answer:
-        "Public email, phone, address, and hours will be published once confirmed. Until then, use the pathway cards on this page to find the most relevant Sunshine resource.",
+        "You can reach Sunshine at info@sunshineservices.org or +1 630-880-4123. Contact hours are 9:00 AM–6:00 PM. For donations, partnerships, assistance, or volunteering, use the pathway cards on this page.",
     },
     {
       question: "How can a business donate surplus goods?",
@@ -168,7 +209,7 @@ export const contactFaq = {
     {
       question: "Can I visit a Sunshine location?",
       answer:
-        "Public location, mailing address, and visiting information have not yet been confirmed for publication. Details will be shared when available. This page does not invent a visit address or hours.",
+        "Sunshine's published physical location is 20 Hampton Road, IL 60450. Visiting availability and related details will be shared when confirmed.",
     },
   ],
 };
@@ -176,5 +217,5 @@ export const contactFaq = {
 export const contactFinalCta = {
   heading: "Find the Right Sunshine Resource",
   support:
-    "Choose the pathway that best matches your question while public contact channels are being finalized.",
+    "Choose the pathway that best matches your question, or use the public contact details on this page.",
 };

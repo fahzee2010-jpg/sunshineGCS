@@ -36,10 +36,10 @@ export function Header() {
 
   return (
     <header className="site-header">
-      <div className="container-site flex items-center justify-between gap-4 py-3 lg:py-4">
+      <div className="container-site flex items-center justify-between gap-3 py-3 xl:gap-4 xl:py-4">
         <Link
           href="/"
-          className="max-w-[11rem] text-base font-bold text-white no-underline hover:text-sunshine-gold sm:max-w-[16rem] sm:text-lg"
+          className="max-w-[11rem] shrink-0 text-base font-bold text-white no-underline hover:text-sunshine-gold sm:max-w-[14rem] sm:text-lg xl:max-w-[15rem]"
           onClick={closeMenu}
         >
           {SITE_NAME}
@@ -47,7 +47,7 @@ export function Header() {
 
         <button
           type="button"
-          className="btn btn-outline border-white/70 text-white hover:bg-white/10 lg:hidden"
+          className="btn btn-outline border-white/70 text-white hover:bg-white/10 xl:hidden"
           aria-expanded={open}
           aria-controls={menuId}
           onClick={() => setOpen((value) => !value)}
@@ -56,17 +56,17 @@ export function Header() {
           <span aria-hidden="true">{open ? "Close" : "Menu"}</span>
         </button>
 
-        <div className="hidden min-w-0 items-center gap-5 xl:gap-6 lg:flex">
-          <nav aria-label="Primary">
-            <ul className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="hidden min-w-0 flex-1 items-center justify-end gap-3 xl:flex xl:gap-4">
+          <nav aria-label="Primary" className="min-w-0">
+            <ul className="flex flex-nowrap items-center gap-x-3">
               {secondaryNav.map((item) => {
                 const isCurrent = pathname === item.href;
                 return (
-                  <li key={item.href}>
+                  <li key={item.href} className="shrink-0">
                     <Link
                       href={item.href}
                       className={cn(
-                        "text-nav no-underline",
+                        "text-nav whitespace-nowrap no-underline",
                         isCurrent
                           ? "font-semibold text-sunshine-gold"
                           : "text-white/85 hover:text-sunshine-gold",
@@ -81,17 +81,17 @@ export function Header() {
             </ul>
           </nav>
 
-          <nav aria-label="Priority actions">
-            <ul className="flex flex-wrap items-center gap-2">
+          <nav aria-label="Priority actions" className="shrink-0">
+            <ul className="flex flex-nowrap items-center gap-1.5">
               {primaryActions.map((item) => {
                 const isCurrent = pathname === item.href;
                 const isLead = item.href === "/donate-goods";
                 return (
-                  <li key={item.href}>
+                  <li key={item.href} className="shrink-0">
                     <Link
                       href={item.href}
                       className={cn(
-                        "btn text-btn",
+                        "btn text-btn whitespace-nowrap px-3",
                         isLead
                           ? "bg-sunshine-gold text-charcoal hover:bg-[#e5ab35]"
                           : "border border-white/50 bg-transparent text-white hover:bg-white/10",
@@ -113,7 +113,7 @@ export function Header() {
       <div
         id={menuId}
         className={cn(
-          "border-t border-white/15 lg:hidden",
+          "border-t border-white/15 xl:hidden",
           open ? "block" : "hidden",
         )}
         hidden={!open}
